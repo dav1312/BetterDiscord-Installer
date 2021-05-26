@@ -37,6 +37,10 @@
             obj[platform] = resourcesPath;
             return obj;
         });
+        platforms.update(obj => {
+            obj[platform] = Boolean(resourcesPath);
+            return obj;
+        });
     }
 </script>
 
