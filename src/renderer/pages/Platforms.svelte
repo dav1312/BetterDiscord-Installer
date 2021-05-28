@@ -13,14 +13,17 @@
     canGoBack.set(true);
     nextPage.set(`/${$action}`);
 
+    function updateInstalButtonState() {
+        if (Object.values($platforms).some(r => r)) canGoForward.set(true);
+        else canGoForward.set(false);
+    }
+
     function change({target}) {
         platforms.update(s => {
             s[target.value] = target.checked;
             return s;
         });
-
-        if (Object.values($platforms).some(r => r)) canGoForward.set(true);
-        else canGoForward.set(false);
+        updateInstalButtonState();
     }
 
     async function click(event) {
@@ -41,6 +44,7 @@
             obj[platform] = Boolean(resourcesPath);
             return obj;
         });
+        updateInstalButtonState();
     }
 </script>
 
