@@ -13,7 +13,7 @@ const getDiscordVersionsForBaseDir = function(basedir) {
     return fs.readdirSync(basedir).filter(
                 dir => 
                     fs.lstatSync(path.join(basedir, dir)).isDirectory() && // filter for directories
-                    semverValid(f.replace("app-","")) && // which have valid semver name (ignoring the app- prefix)
+                    semverValid(dir.replace("app-","")) && // which have valid semver name (ignoring the app- prefix)
                     fs.existsSync(path.join(basedir, dir, "resources")) // that have a resources folder
             ).map(
                 dir => ({
@@ -42,7 +42,7 @@ export const getDiscordPath = function(releaseChannel) {
     ].filter(dir => fs.existsSync(dir));
     if (!basedirs.length) return "";
 
-    const detectedVersions = basedirs.map(getDiscordPathObjectsForBaseDir).flat();
+    const detectedVersions = basedirs.map(getDiscordVersionsForBaseDir).flat();
     console.debug(`Detected versions for channel "${releaseChannel}":`, detectedVersions);
 
     if (!detectedVersions.length) return "";
