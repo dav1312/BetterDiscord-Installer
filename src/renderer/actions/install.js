@@ -134,9 +134,11 @@ export default async function(config) {
     while (downloadErr = await downloadAsar()) {
         const result = await remote.dialog.showMessageBox(remote.getCurrentWindow(), {
             title: "Failed to download package",
-            message: `The BetterDiscord asar file could not be downloaded. This is usually caused by firewalls or antivirus software. Disable them temporarily and try again.
+            message: `The BetterDiscord asar file could not be downloaded. 
+This is usually caused by firewalls or antivirus software. Disable them temporarily and try again.
 
-Alternatively you can provide a local asar file.`,
+Alternatively, download the asar file manually from https://github.com/rauenzi/BetterDiscordApp/releases/latest by clicking betterdiscord.asar.
+Then select the Browse option and pick the file that you just downloaded.`,
             buttons: ["Retry", "Browse", "Cancel"],
             defaultId: 2
         });
