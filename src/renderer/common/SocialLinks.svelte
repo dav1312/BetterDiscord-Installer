@@ -17,7 +17,7 @@
         </svg>
     </a>
     <a class="social" id="donate" title="Support BetterDiscord on Patreon" target="_blank" href={donateUrl}>
-        <svg xmlns="http://www.w3.org/2000/svg" width="24px" height="24px" viewBox="0 0 569 546">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 569 546">
             <circle cx="362.589996" cy="204.589996" r="204.589996"></circle>
             <rect height="545.799988" width="100" x="0" y="0"></rect>
         </svg>
