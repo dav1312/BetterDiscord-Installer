@@ -1,0 +1,186 @@
+on:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: The version label to be used for this release
+        required: true
+
+concurrency: release
+
+name: Release Pipeline
+# This pipeline is pretty hard-coded and will deliver
+# identical results no matter the branch it's run against.
+
+jobs:
+
+  # Checkout 'release', merge 'development', bump version, upload source artifact.
+  prepare:
+    name: Prepare Repo
+    runs-on: ubuntu-latest
+    outputs:
+      previous_release: ${{ steps.version_bump.outputs.old_version }}
+    steps:
+
+      - name: checkout 'release'
+        uses: actions/checkout@v2
+        with:
+          ref: 'release'
+          fetch-depth: 0
+
+      - name: merge 'development' and bump version
+        id: version_bump
+        run: |
+          git config --global user.name "BetterDiscord CI"
+          git config --global user.email "BetterDiscord@users.noreply.github.com"
+          git merge --no-ff --no-commit 'origin/development'
+          OLD_VERSION=$(node -e '
+            const fs = require("fs");
+            const packageJson = JSON.parse(fs.readFileSync("package.json", "utf-8"));
+            fs.writeFileSync("package.json", JSON.stringify({
+              ...packageJson,
+              version: process.env.VERSION_TAG,
+            }), null, 2);
+            console.log(packageJson.version);
+          ')
+          git add .
+          git commit -m "CI: Prepare release '$VERSION_TAG'"
+          echo "::set-output name=old_version::$OLD_VERSION"
+        env:
+          VERSION_TAG: ${{ github.event.inputs.version_tag }}
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: source
+          path: .
+
+  # Download source artifact, build, upload build artifact.
+  # Runs once on each release platform.
+  build:
+    name: Build
+    needs: prepare
+    strategy:
+      fail-fast: true
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: source
+
+      - run: yarn install && yarn dist
+
+      - uses: actions/upload-artifact@v2
+        if: ${{ success() && matrix.os == 'ubuntu-latest' }}
+        with:
+          name: build
+          path: dist/BetterDiscord-Linux.AppImage
+
+      - if: ${{ success() && matrix.os == 'macos-latest' }}
+        run: rename dist/BetterDiscord-*-mac.zip dist/BetterDiscord-Mac.zip
+      - uses: actions/upload-artifact@v2
+        if: ${{ success() && matrix.os == 'macos-latest' }}
+        with:
+          name: build
+          path: dist/BetterDiscord-Mac.zip
+
+      - uses: actions/upload-artifact@v2
+        if: ${{ success() && matrix.os == 'windows-latest' }}
+        with:
+          name: build
+          path: dist/BetterDiscord-Windows.exe
+
+  # Download source artifact, push to 'release'.
+  label_repo:
+    name: Push Version Bump
+    needs: build
+    runs-on: ubuntu-latest
+    outputs:
+      sha_1: ${{ steps.push.outputs.sha_1 }}
+    steps:
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: source
+
+      - name: checkout 'development'
+        uses: actions/checkout@v2
+        with:
+          ref: 'development'
+          token: ${{ secrets.CI_PAT }}
+          clean: false
+
+      - name: merge 'release' and push everything
+        id: push
+        run: |
+          git merge --ff-only 'release'
+          SHA1=$(git rev-parse --verify HEAD)
+          git push --all --follow-tags
+          echo "::set-output name=sha_1::$SHA1"
+
+  # Download build artifact, do github release.
+  publish:
+    name: Draft Release
+    needs:
+      - prepare
+      - label_repo
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: install gh-cli
+        run: |
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+            | sudo gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo 'deb [arch='"$(dpkg --print-architecture)"' signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main' \
+            | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh
+
+      - uses: actions/checkout@v2
+        with:
+          ref: ${{ needs.label_repo.outputs.sha_1 }}
+          token: ${{ secrets.CI_PAT }}
+
+      - name: authenticate gh-cli
+        run: gh auth login
+        env:
+          GITHUB_TOKEN: ${{ secrets.CI_PAT }}
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: build
+          path: assets
+
+      - name: upload release draft
+        run: |
+          # Release notes template:
+          cat << 'EOL'
+
+          ## What's Changed
+          - The installer repo now has CI-backed releases. (@Inve1951)
+
+          <!--
+          ## New Contributors
+          - @Baits4000 made their first contribution in #7000.
+          -->
+
+          The full list of changes can be viewed at https://github.com/BetterDiscord/Installer/compare/$PREVIOUS_RELEASE...$VERSION_TAG
+
+          EOL \
+          `# Allowed substitutions:` \
+          | sed -e 's/$SHA1/'"$SHA1"'/' - \
+          | sed -e 's/$VERSION_TAG/'"$VERSION_TAG"'/' - \
+          | sed -e 's/$PREVIOUS_RELEASE/'"$PREVIOUS_RELEASE"'/' - \
+          `# perform upload` \
+          | gh release create "$VERSION_TAG" --title "$VERSION_TAG" --target "$SHA1" --notes-file - \
+            "assets/BetterDiscord-Linux.AppImage#Linux (AppImage)" \
+            "assets/BetterDiscord-Mac.zip#Mac OS (Zip)" \
+            "assets/BetterDiscord-Windows.exe#Windows (Exe)"
+        env:
+          SHA1: ${{ needs.label_repo.outputs.sha_1 }}
+          VERSION_TAG: ${{ github.event.inputs.version_tag }}
+          PREVIOUS_RELEASE: ${{ needs.prepare.outputs.previous_release }}
