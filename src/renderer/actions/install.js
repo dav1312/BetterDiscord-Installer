@@ -158,10 +158,7 @@ export default async function(config) {
     progress.set(MAKE_DIR_PROGRESS);
     
 
-    lognewline("Downloading asar file");
-    const downloadErr = await downloadAndInstallAsar();
-    if (downloadErr) return fail();
-    log("✅ Package downloaded");
+    lognewline("✅ Asar download skipped");
     progress.set(DOWNLOAD_PACKAGE_PROGRESS);
 
 
